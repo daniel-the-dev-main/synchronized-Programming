@@ -66,7 +66,7 @@ Reconstructs system or dock-specific state by replaying the log
 getStatusNEW(bike)
 Scans the log to determine the current status of a bike
 Latest relevant action determines status
-⚡ Concurrency Model
+Concurrency Model
 Lock-free design using compareAndSet (CAS)
 Multiple threads can:
 Read the log concurrently
