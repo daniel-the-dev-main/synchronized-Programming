@@ -1,0 +1,108 @@
+Yvvid Concurrent Bike System – Design Overview
+
+This project implements a non-blocking, concurrent bike dock system using a log-based (history-driven) approach. Instead of mutating shared state directly, all operations are recorded as actions in a global log, and the current system state is derived by replaying that log.
+
+Core Idea: Log-Based State (Universal Construction)
+
+At the heart of the system is a lock-free linked list (log) that stores all operations as Action<BikeDock> entries.
+
+Each node represents an operation (e.g., MOVED_IN, MOVED_OUT, REPAIRED)
+The system never directly modifies bike/dock state
+Instead, it reconstructs state by scanning the log
+
+This follows a universal construction pattern:
+
+All threads agree on a single history of operations, and state is derived deterministically from that history.
+
+Data Structures
+log: Head of a lock-free linked list of actions
+Node<T>: Represents each entry in the log (with atomic next pointer)
+BikeDock: Combines a bike and its dock for logging
+Set<BikeSolution>: Used to reconstruct current dock contents
+How Operations Work
+
+Every operation follows the same 3-step pattern:
+
+1. Read (Reconstruct State)
+
+Traverse the log and rebuild the relevant state:
+
+Which bikes are in a dock
+Whether a bike is available, repaired, etc.
+2. Validate
+
+Check if the operation is allowed:
+
+Capacity constraints (dock not full)
+Bike availability (e.g., must be READY)
+Ownership (bike must exist in source dock)
+3. Append to Log (Atomic)
+
+Create a list of new actions and attempt to append them using compareAndSet:
+
+If successful → operation commits
+If it fails → retry (another thread modified the log)
+⚙️ Key Methods
+addBikes(dock, bikes)
+Adds bikes to a dock if:
+There is enough capacity
+Bikes are in READY state
+Appends IN_CIRCULATION actions
+rideBikes(from, to, bikes)
+Moves bikes between docks:
+Validates bikes exist in source
+Validates destination has space
+Appends:
+MOVED_OUT (from source)
+MOVED_IN (to destination)
+repairBikes(dock, bikes)
+Marks bikes as repaired
+Appends REPAIRED actions
+rechargeBikes(dock, bikes)
+Marks bikes as recharged
+Appends RECHARGED actions
+getBikes() / getBikes(dock)
+Reconstructs system or dock-specific state by replaying the log
+getStatusNEW(bike)
+Scans the log to determine the current status of a bike
+Latest relevant action determines status
+⚡ Concurrency Model
+Lock-free design using compareAndSet (CAS)
+Multiple threads can:
+Read the log concurrently
+Attempt to append actions
+If two threads conflict:
+One succeeds
+The other retries
+
+This guarantees:
+
+No locks (no blocking)
+System-wide consistency
+Thread safety
+Important Notes / Limitations
+Performance:
+Every operation scans the entire log → can become slow as the log grows
+Tail Handling:
+Appending uses either:
+log.next (empty log case)
+tail.next (normal case)
+Subtle Semantics:
+Correct handling of actions like IN_CIRCULATION vs MOVED_IN is critical for consistency
+Why This Approach?
+
+This design is useful for:
+
+Understanding lock-free data structures
+Practicing linearizability
+Learning how to build thread-safe systems without locks
+
+It mirrors ideas used in:
+
+Distributed systems logs
+Event sourcing architectures
+Summary
+State is never stored directly — it’s derived from history
+All operations are atomic log appends
+Concurrency is handled via CAS + retries
+The system is lock-free and linearizable
